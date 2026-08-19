@@ -89,20 +89,20 @@ export async function processVideo(url: string, config?: ApiKeyConfig): Promise<
     createdAt: new Date().toISOString(),
   };
 
-  saveJob(job);
+  await saveJob(job);
 
   // Run processing in background
-  processJobAsync(jobId, config).catch((err) => {
+  processJobAsync(jobId, config).catch(async (err) => {
     const message = friendlyError(err);
     console.error(`[pipeline] Job ${jobId} failed:`, err);
-    updateJob(jobId, {
+    await updateJob(jobId, {
       status: "error",
       error: message,
       message,
     });
     // Refund credit on failure
     if (config?.userId) {
-      addCredits(config.userId, 1);
+      await addCredits(config.userId, 1);
       console.log(`[pipeline] Refunded 1 credit to user ${config.userId}`);
     }
   });
@@ -145,13 +145,13 @@ async function processJobAsync(jobId: string, config?: ApiKeyConfig): Promise<vo
     status: "pending" as const,
   }));
 
-  updateJob(jobId, { clips: jobClips });
+  await updateJob(jobId, { clips: jobClips });
 
   await step(jobId, "clipping", 60, "Generating clips...");
 
-  const results = await generateClips(jobId, videoPath, suggestions, (current, total) => {
+  const results = await generateClips(jobId, videoPath, suggestions, async (current, total) => {
     const progress = 60 + Math.floor((current / total) * 35);
-    updateJob(jobId, {
+    await updateJob(jobId, {
       progress,
       message: `Rendering clip ${current}/${total}...`,
     });
@@ -167,7 +167,7 @@ async function processJobAsync(jobId: string, config?: ApiKeyConfig): Promise<vo
     };
   });
 
-  updateJob(jobId, {
+  await updateJob(jobId, {
     status: "done",
     progress: 100,
     message: "All clips ready!",
@@ -182,7 +182,7 @@ async function step(
   progress: number,
   message: string
 ): Promise<Job> {
-  const job = updateJob(jobId, { status, progress, message });
+  const job = await updateJob(jobId, { status, progress, message });
   if (!job) throw new Error("Job not found");
   return job;
 }

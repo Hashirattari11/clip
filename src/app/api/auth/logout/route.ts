@@ -3,7 +3,7 @@ import { deleteSession, clearSessionCookie, getTokenFromCookies } from "@/lib/au
 
 export async function POST(req: NextRequest) {
   const token = getTokenFromCookies(req.headers.get("cookie"));
-  if (token) deleteSession(token);
+  if (token) await deleteSession(token);
 
   const response = NextResponse.json({ success: true });
   response.headers.set("Set-Cookie", clearSessionCookie());

@@ -8,7 +8,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Please login first" }, { status: 401 });
     }
 
-    const sessionUser = getSessionUser(token);
+    const sessionUser = await getSessionUser(token);
     if (!sessionUser) {
       return NextResponse.json({ error: "Session expired, please login again" }, { status: 401 });
     }
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     if (provider) updates.provider = provider;
     if (browser) updates.browser = browser;
 
-    updateUser(sessionUser.id, updates);
+    await updateUser(sessionUser.id, updates);
 
     return NextResponse.json({ success: true });
   } catch (err: unknown) {
@@ -44,12 +44,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ hasKey: false });
   }
 
-  const sessionUser = getSessionUser(token);
+  const sessionUser = await getSessionUser(token);
   if (!sessionUser) {
     return NextResponse.json({ hasKey: false });
   }
 
-  const fullUser = getUserById(sessionUser.id);
+  const fullUser = await getUserById(sessionUser.id);
   const key = fullUser?.apiKey || "";
   const masked = key ? key.slice(0, 4) + "••••••••" + key.slice(-4) : "";
   return NextResponse.json({

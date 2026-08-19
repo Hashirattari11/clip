@@ -8,12 +8,12 @@ export async function GET(
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream({
-    start(controller) {
+    async start(controller) {
       let closed = false;
 
-      function send() {
+      async function send() {
         if (closed) return;
-        const job = getJob(params.id);
+        const job = await getJob(params.id);
         if (!job) {
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ error: "Job not found" })}\n\n`));
           controller.close();

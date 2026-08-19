@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const token = getTokenFromCookies(req.headers.get("cookie"));
-    const sessionUser = token ? getSessionUser(token) : null;
+    const sessionUser = token ? await getSessionUser(token) : null;
 
     const { url, apiKey, provider, browser } = await req.json();
     if (!url) {
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     const config: ApiKeyConfig = {};
 
     {
-      const fullUser = getUserById(sessionUser.id);
+      const fullUser = await getUserById(sessionUser.id);
       if (fullUser) {
         config.userId = sessionUser.id;
         config.apiKey = fullUser.apiKey || apiKey || undefined;
@@ -54,7 +54,7 @@ export async function POST(req: NextRequest) {
       // Check credits — only 1 credit per video (0 if cached)
       const isCached = !!getCachedVideoPath(url);
       if (!isCached) {
-        const creditCheck = deductCredit(sessionUser.id, 1);
+        const creditCheck = await deductCredit(sessionUser.id, 1);
         if (!creditCheck.success) {
           return NextResponse.json(
             { error: "Not enough credits. Please add more credits to continue.", remaining: creditCheck.remaining },
@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
 export async function GET(req: NextRequest) {
   const deps = await checkDependencies();
   const token = getTokenFromCookies(req.headers.get("cookie"));
-  const sessionUser = token ? getSessionUser(token) : null;
+  const sessionUser = token ? await getSessionUser(token) : null;
 
   return NextResponse.json({
     ready: deps.ytdlp && deps.ffmpeg,

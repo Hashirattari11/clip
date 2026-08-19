@@ -7,11 +7,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ user: null });
   }
 
-  const user = getSessionUser(token);
+  const user = await getSessionUser(token);
   if (!user) {
     return NextResponse.json({ user: null });
   }
 
-  const credits = getCredits(user.id);
+  const credits = await getCredits(user.id);
   return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name, credits } });
 }

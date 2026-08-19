@@ -1,16 +1,6 @@
-import fs from "fs";
-import path from "path";
+import { supabase } from "./supabase";
 import { compare, hash } from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
-
-const USERS_DIR = path.join(process.cwd(), "data", "users");
-const SESSIONS_FILE = path.join(process.cwd(), "data", "sessions.json");
-
-function ensureDirs() {
-  if (!fs.existsSync(USERS_DIR)) fs.mkdirSync(USERS_DIR, { recursive: true });
-  if (!fs.existsSync(path.join(process.cwd(), "data")))
-    fs.mkdirSync(path.join(process.cwd(), "data"), { recursive: true });
-}
 
 export interface User {
   id: string;
@@ -31,48 +21,53 @@ interface Session {
   expiresAt: string;
 }
 
-// ─── User CRUD ───
+// ─── User CRUD (Supabase) ───
 
 export async function createUser(
   email: string,
   name: string,
   password: string
 ): Promise<Omit<User, "passwordHash">> {
-  ensureDirs();
+  if (!supabase) throw new Error("Database not configured");
 
   // Check if email exists
-  const existing = getUserByEmail(email);
+  const existing = await getUserByEmail(email);
   if (existing) throw new Error("Email already registered");
 
   const id = uuidv4();
   const passwordHash = await hash(password, 12);
 
-  const user: User = {
+  const { error } = await supabase.from("users").insert({
     id,
     email: email.toLowerCase().trim(),
     name: name.trim(),
-    passwordHash,
+    password_hash: passwordHash,
+    api_key: "",
+    provider: "gemini",
+    browser: "chrome",
+    credits: 100,
+    created_at: new Date().toISOString(),
+  });
+
+  if (error) throw new Error(error.message);
+
+  return {
+    id,
+    email: email.toLowerCase().trim(),
+    name: name.trim(),
     apiKey: "",
     provider: "gemini",
     browser: "chrome",
     credits: 100,
     createdAt: new Date().toISOString(),
   };
-
-  fs.writeFileSync(
-    path.join(USERS_DIR, `${id}.json`),
-    JSON.stringify(user, null, 2)
-  );
-
-  const { passwordHash: _, ...safe } = user;
-  return safe;
 }
 
 export async function loginUser(
   email: string,
   password: string
 ): Promise<Omit<User, "passwordHash">> {
-  const user = getUserByEmail(email);
+  const user = await getUserByEmail(email);
   if (!user) throw new Error("Invalid email or password");
 
   const valid = await compare(password, user.passwordHash);
@@ -82,89 +77,135 @@ export async function loginUser(
   return safe;
 }
 
-export function getUserById(id: string): User | null {
-  ensureDirs();
-  const file = path.join(USERS_DIR, `${id}.json`);
-  if (!fs.existsSync(file)) return null;
-  return JSON.parse(fs.readFileSync(file, "utf-8")) as User;
+export async function getUserById(id: string): Promise<User | null> {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("id", id)
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name,
+    passwordHash: data.password_hash,
+    apiKey: data.api_key || "",
+    provider: data.provider || "gemini",
+    browser: data.browser || "chrome",
+    credits: data.credits ?? 100,
+    createdAt: data.created_at,
+  };
 }
 
-export function getUserByEmail(email: string): User | null {
-  ensureDirs();
-  const files = fs.readdirSync(USERS_DIR).filter((f) => f.endsWith(".json"));
-  for (const f of files) {
-    const user = JSON.parse(
-      fs.readFileSync(path.join(USERS_DIR, f), "utf-8")
-    ) as User;
-    if (user.email === email.toLowerCase().trim()) return user;
+export async function getUserByEmail(email: string): Promise<User | null> {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("*")
+    .eq("email", email.toLowerCase().trim())
+    .single();
+
+  if (error || !data) return null;
+
+  return {
+    id: data.id,
+    email: data.email,
+    name: data.name,
+    passwordHash: data.password_hash,
+    apiKey: data.api_key || "",
+    provider: data.provider || "gemini",
+    browser: data.browser || "chrome",
+    credits: data.credits ?? 100,
+    createdAt: data.created_at,
+  };
+}
+
+export async function updateUser(id: string, updates: Partial<User>): Promise<User | null> {
+  if (!supabase) return null;
+
+  const dbUpdates: Record<string, unknown> = {};
+  if (updates.apiKey !== undefined) dbUpdates.api_key = updates.apiKey;
+  if (updates.provider !== undefined) dbUpdates.provider = updates.provider;
+  if (updates.browser !== undefined) dbUpdates.browser = updates.browser;
+  if (updates.credits !== undefined) dbUpdates.credits = updates.credits;
+  if (updates.name !== undefined) dbUpdates.name = updates.name;
+
+  const { error } = await supabase
+    .from("users")
+    .update(dbUpdates)
+    .eq("id", id);
+
+  if (error) {
+    console.log("[auth] updateUser failed:", error.message);
+    return null;
   }
-  return null;
+
+  return getUserById(id);
 }
 
-export function updateUser(id: string, updates: Partial<User>): User | null {
-  const user = getUserById(id);
-  if (!user) return null;
-  const updated = { ...user, ...updates };
-  fs.writeFileSync(
-    path.join(USERS_DIR, `${id}.json`),
-    JSON.stringify(updated, null, 2)
-  );
-  return updated;
-}
+// ─── Sessions (Supabase) ───
 
-// ─── Sessions ───
+export async function createSession(userId: string): Promise<string> {
+  if (!supabase) throw new Error("Database not configured");
 
-function getSessions(): Session[] {
-  ensureDirs();
-  if (!fs.existsSync(SESSIONS_FILE)) return [];
-  return JSON.parse(fs.readFileSync(SESSIONS_FILE, "utf-8")) as Session[];
-}
-
-function saveSessions(sessions: Session[]) {
-  ensureDirs();
-  fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
-}
-
-export function createSession(userId: string): string {
   const token = uuidv4();
-  const sessions = getSessions();
-
-  // Clean expired sessions
   const now = new Date();
-  const cleaned = sessions.filter((s) => new Date(s.expiresAt) > now);
+  const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
-  cleaned.push({
+  // Clean expired sessions first
+  await supabase
+    .from("sessions")
+    .delete()
+    .lt("expires_at", now.toISOString());
+
+  const { error } = await supabase.from("sessions").insert({
     token,
-    userId,
-    createdAt: now.toISOString(),
-    expiresAt: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString(), // 30 days
+    user_id: userId,
+    created_at: now.toISOString(),
+    expires_at: expiresAt,
   });
 
-  saveSessions(cleaned);
+  if (error) throw new Error(error.message);
   return token;
 }
 
-export function getSessionUser(token: string): Omit<User, "passwordHash"> | null {
-  const sessions = getSessions();
-  const session = sessions.find((s) => s.token === token);
-  if (!session) return null;
-  if (new Date(session.expiresAt) < new Date()) {
-    // expired
-    saveSessions(sessions.filter((s) => s.token !== token));
+export async function getSessionUser(token: string): Promise<Omit<User, "passwordHash"> | null> {
+  if (!supabase) return null;
+
+  // Find session
+  const { data: session, error: sessionError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("token", token)
+    .single();
+
+  if (sessionError || !session) return null;
+
+  // Check expiry
+  if (new Date(session.expires_at) < new Date()) {
+    await supabase.from("sessions").delete().eq("token", token);
     return null;
   }
-  const user = getUserById(session.userId);
+
+  // Get user
+  const user = await getUserById(session.user_id);
   if (!user) return null;
+
   const { passwordHash: _, ...safe } = user;
   return safe;
 }
 
-export function deleteSession(token: string) {
-  const sessions = getSessions();
-  saveSessions(sessions.filter((s) => s.token !== token));
+export async function deleteSession(token: string): Promise<void> {
+  if (!supabase) return;
+  await supabase.from("sessions").delete().eq("token", token);
 }
 
-// ─── Cookie helpers ───
+// ─── Cookie helpers (unchanged) ───
 
 const COOKIE_NAME = "clipspark_session";
 
@@ -183,32 +224,42 @@ export function getTokenFromCookies(cookieHeader: string | null): string | null 
   return match ? match[1] : null;
 }
 
-// ─── Credits ───
+// ─── Credits (Supabase) ───
 
-export function getCredits(userId: string): number {
-  const user = getUserById(userId);
+export async function getCredits(userId: string): Promise<number> {
+  const user = await getUserById(userId);
   return user?.credits ?? 0;
 }
 
-export function deductCredit(userId: string, amount: number = 1): { success: boolean; remaining: number } {
-  const user = getUserById(userId);
+export async function deductCredit(userId: string, amount: number = 1): Promise<{ success: boolean; remaining: number }> {
+  if (!supabase) return { success: false, remaining: 0 };
+
+  const user = await getUserById(userId);
   if (!user) return { success: false, remaining: 0 };
   if (user.credits < amount) return { success: false, remaining: user.credits };
-  const updated = { ...user, credits: user.credits - amount };
-  fs.writeFileSync(
-    path.join(USERS_DIR, `${userId}.json`),
-    JSON.stringify(updated, null, 2)
-  );
-  return { success: true, remaining: updated.credits };
+
+  const newCredits = user.credits - amount;
+  const { error } = await supabase
+    .from("users")
+    .update({ credits: newCredits })
+    .eq("id", userId);
+
+  if (error) return { success: false, remaining: user.credits };
+  return { success: true, remaining: newCredits };
 }
 
-export function addCredits(userId: string, amount: number): number {
-  const user = getUserById(userId);
+export async function addCredits(userId: string, amount: number): Promise<number> {
+  if (!supabase) return 0;
+
+  const user = await getUserById(userId);
   if (!user) return 0;
-  const updated = { ...user, credits: user.credits + amount };
-  fs.writeFileSync(
-    path.join(USERS_DIR, `${userId}.json`),
-    JSON.stringify(updated, null, 2)
-  );
-  return updated.credits;
+
+  const newCredits = user.credits + amount;
+  const { error } = await supabase
+    .from("users")
+    .update({ credits: newCredits })
+    .eq("id", userId);
+
+  if (error) return user.credits;
+  return newCredits;
 }

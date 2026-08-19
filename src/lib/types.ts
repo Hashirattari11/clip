@@ -53,6 +53,7 @@ export interface Job {
   createdAt: string;
   error?: string;
   processingTime?: number;
+  userId?: string;
 }
 
 export interface VideoInfo {
