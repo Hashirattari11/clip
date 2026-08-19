@@ -1,0 +1,15 @@
+User-agent: *
+Allow: /
+Allow: /dashboard
+Allow: /auth
+Allow: /about
+Allow: /contact
+Allow: /privacy
+Allow: /terms
+Allow: /refund
+Disallow: /api/
+Disallow: /editor/
+Disallow: /data/
+Disallow: /node_modules/
+
+Sitemap: https://clipspark.app/sitemap.xml
