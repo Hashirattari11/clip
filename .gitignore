@@ -45,3 +45,5 @@ output/
 # IDE
 .vscode/
 .idea/
+
+.vercel
