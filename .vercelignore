@@ -1,0 +1,7 @@
+node_modules
+.next
+.opencode
+data
+uploads
+output
+.git
