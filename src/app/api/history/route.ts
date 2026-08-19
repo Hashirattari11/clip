@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { getSupabase } from "@/lib/supabase";
 import { listJobs } from "@/lib/storage";
 
 /**
@@ -8,9 +8,9 @@ import { listJobs } from "@/lib/storage";
  */
 export async function GET() {
   // Try Supabase first
-  if (supabase) {
+  if (getSupabase()) {
     try {
-      const { data, error } = await supabase
+      const { data, error } = await getSupabase()!
         .from("jobs")
         .select("*")
         .order("created_at", { ascending: false })
@@ -29,13 +29,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (!supabase) {
+  if (!getSupabase()) {
     return NextResponse.json({ success: true, source: "local" });
   }
 
   try {
     const job = await req.json();
-    const { error } = await supabase.from("jobs").upsert({
+    const { error } = await getSupabase()!.from("jobs").upsert({
       id: job.id,
       url: job.url,
       title: job.title,

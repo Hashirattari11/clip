@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { Job } from "./types";
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const CACHE_DIR = path.join(process.cwd(), "data", "cache");
@@ -70,8 +70,8 @@ export function cacheTranscriptPath(url: string, transcriptPath: string): void {
 
 export async function saveJob(job: Job): Promise<void> {
   // Supabase primary
-  if (supabase) {
-    const { error } = await supabase.from("jobs").upsert(
+  if (getSupabase()) {
+    const { error } = await getSupabase()!.from("jobs").upsert(
       {
         id: job.id,
         url: job.url,
@@ -103,8 +103,8 @@ export async function saveJob(job: Job): Promise<void> {
 
 export async function getJob(id: string): Promise<Job | null> {
   // Try Supabase first
-  if (supabase) {
-    const { data, error } = await supabase
+  if (getSupabase()) {
+    const { data, error } = await getSupabase()!
       .from("jobs")
       .select("*")
       .eq("id", id)
@@ -147,8 +147,8 @@ export async function updateJob(id: string, updates: Partial<Job>): Promise<Job 
 
 export async function listJobs(userId?: string): Promise<Job[]> {
   // Try Supabase first
-  if (supabase) {
-    let query = supabase
+  if (getSupabase()) {
+    let query = getSupabase()!
       .from("jobs")
       .select("*")
       .order("created_at", { ascending: false });

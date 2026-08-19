@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { getSupabase } from "./supabase";
 import { compare, hash } from "bcryptjs";
 import { v4 as uuidv4 } from "uuid";
 
@@ -28,7 +28,7 @@ export async function createUser(
   name: string,
   password: string
 ): Promise<Omit<User, "passwordHash">> {
-  if (!supabase) throw new Error("Database not configured");
+  if (!getSupabase()) throw new Error("Database not configured");
 
   // Check if email exists
   const existing = await getUserByEmail(email);
@@ -37,7 +37,7 @@ export async function createUser(
   const id = uuidv4();
   const passwordHash = await hash(password, 12);
 
-  const { error } = await supabase.from("users").insert({
+  const { error } = await getSupabase()!.from("users").insert({
     id,
     email: email.toLowerCase().trim(),
     name: name.trim(),
@@ -78,9 +78,9 @@ export async function loginUser(
 }
 
 export async function getUserById(id: string): Promise<User | null> {
-  if (!supabase) return null;
+  if (!getSupabase()) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()!
     .from("users")
     .select("*")
     .eq("id", id)
@@ -102,9 +102,9 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
-  if (!supabase) return null;
+  if (!getSupabase()) return null;
 
-  const { data, error } = await supabase
+  const { data, error } = await getSupabase()!
     .from("users")
     .select("*")
     .eq("email", email.toLowerCase().trim())
@@ -126,7 +126,7 @@ export async function getUserByEmail(email: string): Promise<User | null> {
 }
 
 export async function updateUser(id: string, updates: Partial<User>): Promise<User | null> {
-  if (!supabase) return null;
+  if (!getSupabase()) return null;
 
   const dbUpdates: Record<string, unknown> = {};
   if (updates.apiKey !== undefined) dbUpdates.api_key = updates.apiKey;
@@ -135,7 +135,7 @@ export async function updateUser(id: string, updates: Partial<User>): Promise<Us
   if (updates.credits !== undefined) dbUpdates.credits = updates.credits;
   if (updates.name !== undefined) dbUpdates.name = updates.name;
 
-  const { error } = await supabase
+  const { error } = await getSupabase()!
     .from("users")
     .update(dbUpdates)
     .eq("id", id);
@@ -151,19 +151,19 @@ export async function updateUser(id: string, updates: Partial<User>): Promise<Us
 // ─── Sessions (Supabase) ───
 
 export async function createSession(userId: string): Promise<string> {
-  if (!supabase) throw new Error("Database not configured");
+  if (!getSupabase()) throw new Error("Database not configured");
 
   const token = uuidv4();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString();
 
   // Clean expired sessions first
-  await supabase
+  await getSupabase()!
     .from("sessions")
     .delete()
     .lt("expires_at", now.toISOString());
 
-  const { error } = await supabase.from("sessions").insert({
+  const { error } = await getSupabase()!.from("sessions").insert({
     token,
     user_id: userId,
     created_at: now.toISOString(),
@@ -175,10 +175,10 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 export async function getSessionUser(token: string): Promise<Omit<User, "passwordHash"> | null> {
-  if (!supabase) return null;
+  if (!getSupabase()) return null;
 
   // Find session
-  const { data: session, error: sessionError } = await supabase
+  const { data: session, error: sessionError } = await getSupabase()!
     .from("sessions")
     .select("*")
     .eq("token", token)
@@ -188,7 +188,7 @@ export async function getSessionUser(token: string): Promise<Omit<User, "passwor
 
   // Check expiry
   if (new Date(session.expires_at) < new Date()) {
-    await supabase.from("sessions").delete().eq("token", token);
+    await getSupabase()!.from("sessions").delete().eq("token", token);
     return null;
   }
 
@@ -201,8 +201,8 @@ export async function getSessionUser(token: string): Promise<Omit<User, "passwor
 }
 
 export async function deleteSession(token: string): Promise<void> {
-  if (!supabase) return;
-  await supabase.from("sessions").delete().eq("token", token);
+  if (!getSupabase()) return;
+  await getSupabase()!.from("sessions").delete().eq("token", token);
 }
 
 // ─── Cookie helpers (unchanged) ───
@@ -232,14 +232,14 @@ export async function getCredits(userId: string): Promise<number> {
 }
 
 export async function deductCredit(userId: string, amount: number = 1): Promise<{ success: boolean; remaining: number }> {
-  if (!supabase) return { success: false, remaining: 0 };
+  if (!getSupabase()) return { success: false, remaining: 0 };
 
   const user = await getUserById(userId);
   if (!user) return { success: false, remaining: 0 };
   if (user.credits < amount) return { success: false, remaining: user.credits };
 
   const newCredits = user.credits - amount;
-  const { error } = await supabase
+  const { error } = await getSupabase()!
     .from("users")
     .update({ credits: newCredits })
     .eq("id", userId);
@@ -249,13 +249,13 @@ export async function deductCredit(userId: string, amount: number = 1): Promise<
 }
 
 export async function addCredits(userId: string, amount: number): Promise<number> {
-  if (!supabase) return 0;
+  if (!getSupabase()) return 0;
 
   const user = await getUserById(userId);
   if (!user) return 0;
 
   const newCredits = user.credits + amount;
-  const { error } = await supabase
+  const { error } = await getSupabase()!
     .from("users")
     .update({ credits: newCredits })
     .eq("id", userId);

@@ -1,36 +1,32 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
 let _client: SupabaseClient | null = null;
+let _initAttempted = false;
 
-function getSupabaseClient(): SupabaseClient | null {
-  if (_client) return _client;
+/**
+ * Get the Supabase client. Returns null if env vars are missing.
+ * Safe to call at build time — won't crash.
+ */
+export function getSupabase(): SupabaseClient | null {
+  if (_initAttempted) return _client;
+  _initAttempted = true;
 
-  // Strip surrounding quotes that Vercel CLI sometimes stores literally
+  // Strip surrounding quotes (Vercel CLI sometimes stores them literally)
   const strip = (s: string) => s.replace(/^["']|["']$/g, "").trim();
 
-  const supabaseUrl = strip(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "");
-  const supabaseKey = strip(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "");
+  const url = strip(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "");
+  const key = strip(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || "");
 
-  if (!supabaseUrl || !supabaseKey) return null;
+  if (!url || !key) return null;
 
   try {
-    _client = createClient(supabaseUrl, supabaseKey);
-    return _client;
-  } catch {
-    return null;
+    _client = createClient(url, key);
+  } catch (e) {
+    console.warn("[supabase] Failed to create client:", e);
   }
+  return _client;
 }
 
-export const supabase = new Proxy({} as SupabaseClient, {
-  get(_target, prop) {
-    const client = getSupabaseClient();
-    if (!client) return undefined;
-    const value = (client as Record<string | symbol, unknown>)[prop];
-    if (typeof value === "function") return value.bind(client);
-    return value;
-  },
-});
-
 export function isSupabaseConfigured(): boolean {
-  return getSupabaseClient() !== null;
+  return getSupabase() !== null;
 }
